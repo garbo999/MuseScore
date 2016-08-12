@@ -50,6 +50,46 @@
 
 
 ====================================================================
+      New Features
+====================================================================
+
+Timewise insert/delete notes/rests
+-----------------------------------
+
+      - Ctrl+Shift+[cdefg]
+        Insert note with current duration.
+        This increases the duration of the actual measure independent of the
+        current time signature making it an irregular measure.
+
+      - Ctrl + left mouse button in note entry mode
+        Inserts note/rest with current duration
+
+      - Ctrl+Del
+        Removes the selected Chord/Rest decreasing the duration of the measure.
+        Extend this to selection ranges.
+
+      - drop barline
+        This inserts a barline into the current measure or changes the current barline.
+
+      - ctrl + drop barline
+        Splits the current measure at the new barline.
+
+      - ctrl + delete barline
+        This joins the current measure with the next measure.
+
+      - show irregular measures
+        This displays a "+" or "-" in the upper right corner of a measure if the measure
+        length is different from the current time signature.
+
+      Functions which may be removed:
+            - split measure: replaced by dropping a barline
+            - join measure:  replaced by deleting a barline
+            - adjusting the actual measure lenght in measure properties; this
+              can be achieved by inserting/deleting notes/rests in the measure.
+            - delete measure timewise: replaced by Ctrl+Del of selection ranges
+
+
+====================================================================
       Programming Style Changes in MuseScore 3
 ====================================================================
 
@@ -87,7 +127,7 @@
 
         Caution when replacing Qt container with stl container as the semantic
         may be different. Especially in a "for (xxx : yyy)" loop the Qt container
-        is copied (copy on write) and the stl container not. That meauns that you can modify a
+        is copied (copy on write) and the stl container not. That means that you can modify a
         Qt container (inserting/deleting elements) in this for loop. This will usually not
         work for a stl container.
 
@@ -168,6 +208,5 @@
 
       * tablature not tested, has likely regressions
       * some scripting interface functions are commented out
-      * horizontal layout mode not working
-      * disabled relayout for beamed notes
+      * horizontal layout mode not working right
 

@@ -2206,6 +2206,14 @@ void Score::createMMRest(Measure* m, Measure* lm, const Fraction& len)
                               ee->setParent(ds);
                               undoAddElement(ee);
                               }
+                        else {
+                              BarLine* bd = toBarLine(ds->element(staffIdx * VOICES));
+                              BarLine* bs = toBarLine(e);
+                              if (bd->barLineType() != bs->barLineType()) {
+                                    undoChangeProperty(bd, P_ID::BARLINE_TYPE, QVariant::fromValue(bs->barLineType()));
+                                    undoChangeProperty(bd, P_ID::GENERATED, true);
+                                    }
+                              }
                         }
                   }
             }
@@ -2429,6 +2437,9 @@ static bool validMMRestMeasure(Measure* m)
                         if (s->element(track))  {
                               if (s->element(track)->type() != Element::Type::REST)
                                     return false;
+                              Rest* rest = toRest(s->element(track));
+                              if (rest->articulations().size() > 0) // break on fermata
+                                    return false;
                               restFound = true;
                               }
                         }
@@ -2526,7 +2537,7 @@ static bool breakMultiMeasureRest(Measure* m)
                         BarLine* bl = toBarLine(s->element(staffIdx * VOICES));
                         if (bl) {
                               BarLineType t = bl->barLineType();
-                              if (t != BarLineType::NORMAL && t != BarLineType::BROKEN && t != BarLineType::DOTTED)
+                              if (t != BarLineType::NORMAL && t != BarLineType::BROKEN && t != BarLineType::DOTTED && !bl->generated())
                                     return true;
                               else
                                     break;
@@ -3293,7 +3304,15 @@ System* Score::collectSystem(LayoutContext& lc)
       if (lineMode)
             system->setWidth(pos.x());
 
-      // layout beams and update the segment shape
+      //
+      // layout
+      //    - beams
+      //    - TempoText
+      //    - RehearsalMark, StaffText
+      //    - Dynamic
+      //    - update the segment shape
+      //
+      //
       int stick = -1;
       int etick = -1;
       for (MeasureBase* mb : system->measures()) {
@@ -3358,7 +3377,7 @@ System* Score::collectSystem(LayoutContext& lc)
       //
       // compute shape of measures
       //
-      // for (auto i = visibleStaves.begin(); i != visibleStaves.end(); ++i) {
+
       for (int si = 0; si < score()->nstaves(); ++si) {
             for (MeasureBase* mb : system->measures()) {
                   if (!mb->isMeasure())
@@ -3405,21 +3424,21 @@ System* Score::collectSystem(LayoutContext& lc)
                         continue;
                   sp->layout();
                   }
-            }
 
-      //
-      // add SpannerSegment shapes to staff shapes
-      //
+            //
+            // add SpannerSegment shapes to staff shapes
+            //
 
-      for (MeasureBase* mb : system->measures()) {
-            if (!mb->isMeasure())
-                  continue;
-            Measure* m = toMeasure(mb);
-            for (SpannerSegment* ss : system->spannerSegments()) {
-                  Spanner* sp = ss->spanner();
-                  if (sp->tick() < m->endTick() && sp->tick2() > m->tick()) {
-                        // spanner shape must be translated from system coordinate space to measure coordinate space
-                        m->staffShape(sp->staffIdx()).add(ss->shape().translated(ss->pos() - m->pos()));
+            for (MeasureBase* mb : system->measures()) {
+                  if (!mb->isMeasure())
+                        continue;
+                  Measure* m = toMeasure(mb);
+                  for (SpannerSegment* ss : system->spannerSegments()) {
+                        Spanner* sp = ss->spanner();
+                        if (sp->tick() < m->endTick() && sp->tick2() > m->tick()) {
+                              // spanner shape must be translated from system coordinate space to measure coordinate space
+                              m->staffShape(sp->staffIdx()).add(ss->shape().translated(ss->pos() - m->pos()));
+                              }
                         }
                   }
             }
@@ -3576,7 +3595,7 @@ bool Score::collectPage(LayoutContext& lc)
 
 void Score::doLayout()
       {
-      qDebug();
+//      qDebug();
 
       if (_staves.empty() || first() == 0) {
             // score is empty
@@ -3652,11 +3671,13 @@ void Score::doLayout()
 
 void Score::doLayoutRange(int stick, int etick)
       {
-      qDebug("%d-%d", stick, etick);
+//      qDebug("%d-%d", stick, etick);
       if (stick == -1 || etick == -1) {
             doLayout();
             return;
             }
+      if (stick < 0)
+            stick = 0;
       LayoutContext lc;
 
 #if 0

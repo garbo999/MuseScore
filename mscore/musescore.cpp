@@ -464,6 +464,7 @@ void MuseScore::populateNoteInputMenu()
                   entryTools->addSeparator();
             else {
                   QAction* a = getAction(s);
+                  QWidget* w;
                   if (strcmp(s, "note-input") == 0) {
                         //-----------------------------------------------------------------
                         // Note Entry Modes menu
@@ -477,16 +478,13 @@ void MuseScore::populateNoteInputMenu()
                         noteEntryMethods->addAction(getAction("note-input-realtime-auto"));
                         noteEntryMethods->addAction(getAction("note-input-realtime-manual"));
 
-                        ToolButtonMenu* noteInputModes = new ToolButtonMenu(tr("Note Entry Methods"),
-                                                                            ToolButtonMenu::TYPES::ICON_CHANGED,
-                                                                            getAction("note-input"),
-                                                                            noteEntryMethods,
-                                                                            this);
-
-                        entryTools->addWidget(noteInputModes);
+                        w = new ToolButtonMenu(tr("Note Entry Methods"),
+                           ToolButtonMenu::TYPES::ICON_CHANGED,
+                           getAction("note-input"),
+                           noteEntryMethods,
+                           this);
                         }
                   else if (strncmp(s, "voice-", 6) == 0) {
-//                        QButton* tb = new QToolButton(this);
                         AccessibleToolButton* tb = new AccessibleToolButton(this, a);
                         tb->setFocusPolicy(Qt::ClickFocus);
                         tb->setToolButtonStyle(Qt::ToolButtonTextOnly);
@@ -498,10 +496,11 @@ void MuseScore::populateNoteInputMenu()
                         tb->setPalette(p);
                         a->setCheckable(true);
                         // tb->setDefaultAction(a);
-                        entryTools->addWidget(tb);
+                        w = tb;
                         }
                   else
-                        entryTools->addWidget(new AccessibleToolButton(entryTools, a));
+                        w = new AccessibleToolButton(entryTools, a);
+                  entryTools->addWidget(w);
                   }
             }
       }
@@ -536,6 +535,7 @@ MuseScore::MuseScore()
                   guiScaling = 1.0;
             }
 
+      setObjectName("MuseScore");
       _sstate = STATE_INIT;
       setWindowTitle(QString(MUSESCORE_NAME_VERSION));
       setIconSize(QSize(preferences.iconWidth * guiScaling, preferences.iconHeight * guiScaling));
@@ -959,6 +959,7 @@ MuseScore::MuseScore()
       menuView->addAction(getAction("show-unprintable"));
       menuView->addAction(getAction("show-frames"));
       menuView->addAction(getAction("show-pageborders"));
+      menuView->addAction(getAction("mark-irregular"));
       menuView->addSeparator();
 
       a = getAction("fullscreen");
@@ -1184,7 +1185,7 @@ MuseScore::MuseScore()
             connect(menuHelp, SIGNAL(aboutToShow()), hw, SLOT(setFocus()));
             }
 #endif
-      //menuHelp->addAction(getAction("local-help"));
+      //menuHelp->addAction(getAction("help"));
       onlineHandbookAction = menuHelp->addAction("", this, SLOT(helpBrowser1()));
 
       menuHelp->addSeparator();
@@ -1740,6 +1741,7 @@ void MuseScore::setCurrentScoreView(ScoreView* view)
       getAction("show-unprintable")->setChecked(cs->showUnprintable());
       getAction("show-frames")->setChecked(cs->showFrames());
       getAction("show-pageborders")->setChecked(cs->showPageborders());
+      getAction("mark-irregular")->setChecked(cs->markIrregularMeasures());
       getAction("fotomode")->setChecked(cv->fotoMode());
       getAction("join-measures")->setEnabled(cs->masterScore()->excerpts().size() == 0);
       getAction("split-measure")->setEnabled(cs->masterScore()->excerpts().size() == 0);
@@ -2053,10 +2055,18 @@ bool MuseScore::midiinEnabled() const
 //    return if midi remote command detected
 //---------------------------------------------------------
 
-bool MuseScore::processMidiRemote(MidiRemoteType type, int data)
+bool MuseScore::processMidiRemote(MidiRemoteType type, int data, int value)
       {
       if (!preferences.useMidiRemote)
             return false;
+      if (!value) {
+            // This was a "NoteOff" or "CtrlOff" event. Most MidiRemote actions should only
+            // be triggered by an "On" event, so we need to check if this is one of those.
+            if (!preferences.advanceOnRelease
+                    || type != preferences.midiRemote[RMIDI_REALTIME_ADVANCE].type
+                    || data != preferences.midiRemote[RMIDI_REALTIME_ADVANCE].data)
+                  return false;
+            }
       for (int i = 0; i < MIDI_REMOTES; ++i) {
             if (preferences.midiRemote[i].type == type && preferences.midiRemote[i].data == data) {
                   if (cv == 0)
@@ -2088,6 +2098,7 @@ bool MuseScore::processMidiRemote(MidiRemoteType type, int data)
                         case RMIDI_TIE:     a = getAction("tie");  break;
                         case RMIDI_UNDO:    a = getAction("undo"); break;
                         case RMIDI_NOTE_EDIT_MODE: a = getAction("note-input");  break;
+                        case RMIDI_REALTIME_ADVANCE: a = getAction("realtime-advance");  break;
                         }
                   if (a)
                         a->trigger();
@@ -2122,7 +2133,7 @@ void MuseScore::midiNoteReceived(int channel, int pitch, int velo)
             return;
             }
 
-      if (velo && processMidiRemote(MIDI_REMOTE_TYPE_NOTEON, pitch)) {
+      if (processMidiRemote(MIDI_REMOTE_TYPE_NOTEON, pitch, velo)) {
             active = 0;
             return;
             }
@@ -2153,10 +2164,10 @@ void MuseScore::midiNoteReceived(int channel, int pitch, int velo)
             ++active;
             }
       else {
-      		/*
-		* Since a note may be assigned to a midi_remote, don't decrease active below zero
-		* on noteoff.
-		*/
+               /*
+               * Since a note may be assigned to a midi_remote, don't decrease active below zero
+               * on noteoff.
+               */
 
             if ((channel != 0x09) && (active > 0))
                   --active;
@@ -2181,7 +2192,7 @@ void MuseScore::midiCtrlReceived(int controller, int value)
             return;
             }
       // when value is 0 (usually when a key is released ) nothing happens
-      if (value && processMidiRemote(MIDI_REMOTE_TYPE_CTRL, controller))
+      if (processMidiRemote(MIDI_REMOTE_TYPE_CTRL, controller, value))
             return;
       }
 
@@ -2979,8 +2990,8 @@ void MuseScore::changeState(ScoreState val)
       static const char* tabNames[] = {
             "note-longa-TAB", "note-breve-TAB", "pad-note-1-TAB", "pad-note-2-TAB", "pad-note-4-TAB",
       "pad-note-8-TAB", "pad-note-16-TAB", "pad-note-32-TAB", "pad-note-64-TAB", "pad-note-128-TAB", "pad-rest-TAB", "rest-TAB"};
-      bool intoTAB = (_sstate != STATE_NOTE_ENTRY_TAB) && (val == STATE_NOTE_ENTRY_TAB);
-      bool fromTAB = (_sstate == STATE_NOTE_ENTRY_TAB) && (val != STATE_NOTE_ENTRY_TAB);
+      bool intoTAB = (_sstate != STATE_NOTE_ENTRY_STAFF_TAB) && (val == STATE_NOTE_ENTRY_STAFF_TAB);
+      bool fromTAB = (_sstate == STATE_NOTE_ENTRY_STAFF_TAB) && (val != STATE_NOTE_ENTRY_STAFF_TAB);
       // if activating TAB note entry, swap "pad-note-...-TAB" shorctuts into "pad-note-..." actions
       if (intoTAB) {
             for (unsigned i = 0; i < sizeof(stdNames)/sizeof(char*); ++i) {
@@ -3060,7 +3071,7 @@ void MuseScore::changeState(ScoreState val)
 
       if (_sstate == STATE_FOTO)
             updateInspector();
-      if (_sstate == STATE_NOTE_ENTRY_DRUM)
+      if (_sstate == STATE_NOTE_ENTRY_STAFF_DRUM)
             showDrumTools(0, 0);
 
       switch(val) {
@@ -3073,10 +3084,37 @@ void MuseScore::changeState(ScoreState val)
             case STATE_NORMAL:
                   _modeText->hide();
                   break;
-            case STATE_NOTE_ENTRY_PITCHED:
-                  showModeText(tr("Note input mode"));
+            case STATE_NOTE_ENTRY:
+                  if (cv && !cv->noteEntryMode())
+                        cv->postCmd("note-input");
+            case STATE_NOTE_ENTRY_STAFF_PITCHED:
+                  if (getAction("note-input-repitch")->isChecked()) {
+                        showModeText(tr("Repitch input mode"));
+                        cs->setNoteEntryMethod(NoteEntryMethod::REPITCH);
+                        val = STATE_NOTE_ENTRY_METHOD_REPITCH;
+                        }
+                  else if (getAction("note-input-rhythm")->isChecked()) {
+                        showModeText(tr("Rhythm input mode"));
+                        cs->setNoteEntryMethod(NoteEntryMethod::RHYTHM);
+                        val = STATE_NOTE_ENTRY_METHOD_RHYTHM;
+                        }
+                  else if (getAction("note-input-realtime-auto")->isChecked()) {
+                        showModeText(tr("Realtime (automatic) note input mode"));
+                        cs->setNoteEntryMethod(NoteEntryMethod::REALTIME_AUTO);
+                        val = STATE_NOTE_ENTRY_METHOD_REALTIME_AUTO;
+                        }
+                  else if (getAction("note-input-realtime-manual")->isChecked()) {
+                        showModeText(tr("Realtime (manual) note input mode"));
+                        cs->setNoteEntryMethod(NoteEntryMethod::REALTIME_MANUAL);
+                        val = STATE_NOTE_ENTRY_METHOD_REALTIME_MANUAL;
+                        }
+                  else {
+                        showModeText(tr("Steptime note input mode"));
+                        cs->setNoteEntryMethod(NoteEntryMethod::STEPTIME);
+                        val = STATE_NOTE_ENTRY_METHOD_STEPTIME;
+                        }
                   break;
-            case STATE_NOTE_ENTRY_DRUM:
+            case STATE_NOTE_ENTRY_STAFF_DRUM:
                   {
                   showModeText(tr("Drum input mode"));
                   InputState& is = cs->inputState();
@@ -3085,7 +3123,7 @@ void MuseScore::changeState(ScoreState val)
                         is.setDrumNote(_drumTools->selectedDrumNote());
                   }
                   break;
-            case STATE_NOTE_ENTRY_TAB:
+            case STATE_NOTE_ENTRY_STAFF_TAB:
                   showModeText(tr("TAB input mode"));
                   break;
             case STATE_EDIT:
@@ -3119,7 +3157,7 @@ void MuseScore::changeState(ScoreState val)
       if (selectionWindow)
             selectionWindow->setDisabled(val == STATE_PLAY || val == STATE_DISABLED);
       QAction* a = getAction("note-input");
-      bool noteEntry = val == STATE_NOTE_ENTRY_PITCHED || val == STATE_NOTE_ENTRY_TAB || val == STATE_NOTE_ENTRY_DRUM;
+      bool noteEntry = val & STATE_NOTE_ENTRY;
       a->setChecked(noteEntry);
       _sstate = val;
 
@@ -3153,8 +3191,7 @@ void MuseScore::saveDialogState(const char* name, QFileDialog* d)
       {
       if (d) {
             settings.beginGroup(name);
-            settings.setValue("size",  d->size());
-            settings.setValue("pos",   d->pos());
+            settings.setValue("geometry", d->saveGeometry());
             settings.setValue("state", d->saveState());
             settings.endGroup();
             }
@@ -3167,9 +3204,8 @@ void MuseScore::saveDialogState(const char* name, QFileDialog* d)
 void MuseScore::restoreDialogState(const char* name, QFileDialog* d)
       {
       settings.beginGroup(name);
-      d->resize(settings.value("size", QSize(860,489)).toSize());
+      d->restoreGeometry(settings.value("geometry").toByteArray());
       d->restoreState(settings.value("state").toByteArray());
-      d->move(settings.value("pos", QPoint(200,200)).toPoint());
       settings.endGroup();
       }
 
@@ -3198,10 +3234,9 @@ void MuseScore::writeSettings()
       settings.setValue("lastSaveCopyFormat", lastSaveCopyFormat);
       settings.setValue("lastSaveDirectory", lastSaveDirectory);
 
+      MuseScore::saveGeometry(this);
+
       settings.beginGroup("MainWindow");
-      settings.setValue("size", size());
-      settings.setValue("pos", pos());
-      settings.setValue("maximized", isMaximized());
       settings.setValue("showPanel", paletteBox && paletteBox->isVisible());
       settings.setValue("showInspector", _inspector && _inspector->isVisible());
       settings.setValue("showPianoKeyboard", _pianoTools && _pianoTools->isVisible());
@@ -3257,7 +3292,7 @@ void MuseScore::writeSettings()
       if (drumrollEditor)
             drumrollEditor->writeSettings();
       if (startcenter)
-            startcenter->writeSettings(settings);
+            startcenter->writeSettings();
       }
 
 //---------------------------------------------------------
@@ -3266,8 +3301,8 @@ void MuseScore::writeSettings()
 
 void MuseScore::readSettings()
       {
+      resize(QSize(1024, 768)); //ensure default size if no geometry in settings
       if (useFactorySettings) {
-            resize(QSize(1024, 768));
             QList<int> sizes;
             sizes << 500 << 100;
             mainWindow->setSizes(sizes);
@@ -3276,23 +3311,29 @@ void MuseScore::readSettings()
             return;
             }
 
+      MuseScore::restoreGeometry(this);
+
       settings.beginGroup("MainWindow");
-      resize(settings.value("size", QSize(1024, 768)).toSize());
       mainWindow->restoreState(settings.value("debuggerSplitter").toByteArray());
       mainWindow->setOpaqueResize(false);
       scorePageLayoutChanged();
 
-      move(settings.value("pos", QPoint(10, 10)).toPoint());
       //for some reason when MuseScore starts maximized the screen-reader
-      //doesn't respond to QAccessibleEvents
-      if (settings.value("maximized", false).toBool() && !QAccessible::isActive())
-            showMaximized();
+      //doesn't respond to QAccessibleEvents --> so force normal mode
+      if (isMaximized() && QAccessible::isActive()) {
+            showNormal();
+            }
       mscore->showPalette(settings.value("showPanel", "1").toBool());
       mscore->showInspector(settings.value("showInspector", "1").toBool());
       mscore->showPianoKeyboard(settings.value("showPianoKeyboard", "0").toBool());
       mscore->showSelectionWindow(settings.value("showSelectionWindow", "0").toBool());
 
       restoreState(settings.value("state").toByteArray());
+      //if we were in full screen mode, go to maximized mode
+      if (isFullScreen()) {
+            showMaximized();
+            }
+
       _horizontalSplit = settings.value("split", true).toBool();
       bool splitScreen = settings.value("splitScreen", false).toBool();
       if (splitScreen) {
@@ -3967,10 +4008,15 @@ const char* stateName(ScoreState s)
       switch(s) {
             case STATE_DISABLED:           return "STATE_DISABLED";
             case STATE_NORMAL:             return "STATE_NORMAL";
-            case STATE_NOTE_ENTRY_PITCHED: return "STATE_NOTE_ENTRY_PITCHED";
-            case STATE_NOTE_ENTRY_DRUM:    return "STATE_NOTE_ENTRY_DRUM";
-            case STATE_NOTE_ENTRY_TAB:     return "STATE_NOTE_ENTRY_TAB";
+            case STATE_NOTE_ENTRY_STAFF_PITCHED: return "STATE_NOTE_ENTRY_STAFF_PITCHED";
+            case STATE_NOTE_ENTRY_STAFF_DRUM:    return "STATE_NOTE_ENTRY_STAFF_DRUM";
+            case STATE_NOTE_ENTRY_STAFF_TAB:     return "STATE_NOTE_ENTRY_STAFF_TAB";
             case STATE_NOTE_ENTRY:         return "STATE_NOTE_ENTRY";
+            case STATE_NOTE_ENTRY_METHOD_STEPTIME:          return "STATE_NOTE_ENTRY_METHOD_STEPTIME";
+            case STATE_NOTE_ENTRY_METHOD_REPITCH:           return "STATE_NOTE_ENTRY_METHOD_REPITCH";
+            case STATE_NOTE_ENTRY_METHOD_RHYTHM:            return "STATE_NOTE_ENTRY_METHOD_RHYTHM";
+            case STATE_NOTE_ENTRY_METHOD_REALTIME_AUTO:     return "STATE_NOTE_ENTRY_METHOD_REALTIME_AUTO";
+            case STATE_NOTE_ENTRY_METHOD_REALTIME_MANUAL:   return "STATE_NOTE_ENTRY_METHOD_REALTIME_MANUAL";
             case STATE_EDIT:               return "STATE_EDIT";
             case STATE_TEXT_EDIT:          return "STATE_TEXT_EDIT";
             case STATE_LYRICS_EDIT:        return "STATE_LYRICS_EDIT";
@@ -4479,7 +4525,10 @@ void MuseScore::endCmd()
             if (samePitch && !cs->selection().elements().empty())
                   e = cs->selection().elements()[0];
 
-            if (e && (cs->playNote() || cs->playChord())) {
+            NoteEntryMethod entryMethod = cs->noteEntryMethod();
+            if (e && (cs->playNote() || cs->playChord())
+                        && entryMethod != NoteEntryMethod::REALTIME_AUTO
+                        && entryMethod != NoteEntryMethod::REALTIME_MANUAL) {
                   if (cs->playChord() && preferences.playChordOnAddNote &&  e->type() == Element::Type::NOTE)
                         play(static_cast<Note*>(e)->chord());
                   else
@@ -4660,7 +4709,7 @@ void MuseScore::cmd(QAction* a, const QString& cmd)
 //            transportTools->setVisible(!transportTools->isVisible());
 //      else if (cmd == "toggle-noteinput")
 //            entryTools->setVisible(!entryTools->isVisible());
-      else if (cmd == "local-help")
+      else if (cmd == "help")
             showContextHelp();
       else if (cmd == "follow")
             preferences.followSong = a->isChecked();
@@ -4757,9 +4806,11 @@ void MuseScore::cmd(QAction* a, const QString& cmd)
       else if (cmd == "show-unprintable")
             cs->setShowUnprintable(a->isChecked());
       else if (cmd == "show-frames")
-            cs->setShowFrames(getAction(cmd.toLatin1().data())->isChecked());
+            cs->setShowFrames(a->isChecked());
       else if (cmd == "show-pageborders")
-            cs->setShowPageborders(getAction(cmd.toLatin1().data())->isChecked());
+            cs->setShowPageborders(a->isChecked());
+      else if (cmd == "mark-irregular")
+            cs->setMarkIrregularMeasures(a->isChecked());
       else if (cmd == "tempo")
             addTempo();
       else if (cmd == "loop") {
@@ -5118,6 +5169,29 @@ void MuseScore::loadPlugins() {}
 bool MuseScore::loadPlugin(const QString&) { return false;}
 void MuseScore::unloadPlugins() {}
 #endif
+
+
+void MuseScore::saveGeometry(QWidget const*const qw)
+      {
+      QSettings settings;
+      QString objectName = qw->objectName();
+      Q_ASSERT(!objectName.isEmpty());
+      settings.beginGroup("Geometries");
+      settings.setValue(objectName, qw->saveGeometry());
+      settings.endGroup();
+      }
+
+void MuseScore::restoreGeometry(QWidget *const qw)
+      {
+      if (!useFactorySettings) {
+            QSettings settings;
+            QString objectName = qw->objectName();
+            Q_ASSERT(!objectName.isEmpty());
+            settings.beginGroup("Geometries");
+            qw->restoreGeometry(settings.value(objectName).toByteArray());
+            settings.endGroup();
+            }
+      }
 
 //---------------------------------------------------------
 //   recentScores

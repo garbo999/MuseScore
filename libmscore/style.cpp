@@ -287,7 +287,7 @@ static const StyleType styleTypes[] {
       { StyleIdx::staccatissimoAnchor,             "staccatissimoAnchor",             int(ArticulationAnchor::CHORD) },
       { StyleIdx::tenutoAnchor,                    "tenutoAnchor",                    int(ArticulationAnchor::CHORD) },
       { StyleIdx::portatoAnchor,                   "portatoAnchor",                   int(ArticulationAnchor::CHORD) },
-      { StyleIdx::marcatoAnchor,                   "marcatoAnchor",                   int(ArticulationAnchor::CHORD) },
+      { StyleIdx::marcatoAnchor,                   "marcatoAnchor",                   int(ArticulationAnchor::TOP_STAFF) },
       { StyleIdx::fadeinAnchor,                    "fadeinAnchor",                    int(ArticulationAnchor::CHORD) },
       { StyleIdx::fadeoutAnchor,                   "fadeoutAnchor",                   int(ArticulationAnchor::CHORD) },
       { StyleIdx::volumeswellAnchor,               "volumeswellAnchor",               int(ArticulationAnchor::CHORD) },
@@ -320,7 +320,8 @@ static const StyleType styleTypes[] {
       { StyleIdx::lutefingering1stAnchor,          "lutefingering1stAnchor",          int(ArticulationAnchor::BOTTOM_CHORD) },
       { StyleIdx::lutefingering2ndAnchor,          "lutefingering2ndAnchor",          int(ArticulationAnchor::BOTTOM_CHORD) },
       { StyleIdx::lutefingering3rdAnchor,          "lutefingering3rdAnchor",          int(ArticulationAnchor::BOTTOM_CHORD) },
-      { StyleIdx::autoplaceHairpinDynamicsDistance, "autoplaceHairpinDynamicsDistance", Spatium(0.5) }
+      { StyleIdx::autoplaceHairpinDynamicsDistance, "autoplaceHairpinDynamicsDistance", Spatium(0.5) },
+      { StyleIdx::dynamicsMinDistance,             "dynamicsMinDistance",               Spatium(0.5) }
       };
 
 //---------------------------------------------------------
@@ -543,20 +544,22 @@ void MStyle::setChordList(ChordList* cl, bool custom)
 
 MStyle::MStyle(const MStyle& s)
       {
-      _values          = s._values;
-      _chordList       = s._chordList;
-      _textStyles      = s._textStyles;
+      _values            = s._values;
+      _precomputedValues = s._precomputedValues;
+      _chordList         = s._chordList;
+      _textStyles        = s._textStyles;
       _pageFormat.copy(s._pageFormat);
-      _customChordList = s._customChordList;
+      _customChordList   = s._customChordList;
       }
 
 MStyle& MStyle::operator=(const MStyle& s)
       {
-      _values          = s._values;
-      _chordList       = s._chordList;
-      _textStyles      = s._textStyles;
+      _values            = s._values;
+      _precomputedValues = s._precomputedValues;
+      _chordList         = s._chordList;
+      _textStyles        = s._textStyles;
       _pageFormat.copy(s._pageFormat);
-      _customChordList = s._customChordList;
+      _customChordList   = s._customChordList;
       return *this;
       }
 

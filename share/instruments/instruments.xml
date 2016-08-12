@@ -50,10 +50,13 @@
                   <shortName>Picc.</shortName>
                   <description>Piccolo</description>
                   <musicXMLid>wind.flutes.flute.piccolo</musicXMLid>
-                  <clef>G8va</clef>
+                  <transposingClef>G</transposingClef>
+                  <concertClef>G8va</concertClef>
                   <barlineSpan>1</barlineSpan>
                   <aPitchRange>74-105</aPitchRange>
                   <pPitchRange>74-108</pPitchRange>
+                  <transposeDiatonic>7</transposeDiatonic>
+                  <transposeChromatic>12</transposeChromatic>
                   <Channel>
                         <program value="72"/>
                   </Channel>
@@ -3271,7 +3274,7 @@
             </Instrument>
             <Instrument id="tenor-trumpet">
                   <longName>Tenor Trumpet</longName>
-                  <shortName>Tnr. Tpt.</shortName>
+                  <shortName>T. Tpt.</shortName>
                   <description>Tenor Trumpet (included for MusicXML 3 compatibility no
                         range information available)</description>
                   <musicXMLid>brass.trumpet.tenor</musicXMLid>
@@ -8518,6 +8521,32 @@
                   </Channel>
                   <genre>common</genre>
             </Instrument>
+            <Instrument id="guitar-nylon-treble-clef">
+                  <trackName>Guitar (Treble Clef)</trackName>
+                  <longName>Guitar</longName>
+                  <shortName>Guit.</shortName>
+                  <description>Acoustic Nylon-strung Guitar (Treble Clef)</description>
+                  <musicXMLid>pluck.guitar.nylon-string</musicXMLid>
+                  <StringData>
+                        <frets>19</frets>
+                        <string>52</string>
+                        <string>57</string>
+                        <string>62</string>
+                        <string>67</string>
+                        <string>71</string>
+                        <string>76</string>
+                  </StringData>
+                  <transposingClef>G</transposingClef>
+                  <concertClef>G8vb</concertClef>
+                  <barlineSpan>1</barlineSpan>
+                  <aPitchRange>40-83</aPitchRange>
+                  <pPitchRange>40-83</pPitchRange>
+                  <transposeDiatonic>-7</transposeDiatonic>
+                  <transposeChromatic>-12</transposeChromatic>
+                  <Channel>
+                        <program value="24"/>
+                  </Channel>
+            </Instrument>
             <Instrument id="guitar-nylon-tablature">
                   <trackName>Classical Guitar [Tablature]</trackName>
                   <init>guitar-nylon</init>
@@ -9299,10 +9328,13 @@
                         <string>38</string>
                         <string>43</string>
                   </StringData>
-                  <clef>F8vb</clef>
+                  <transposingClef>F</transposingClef>
+                  <concertClef>F8vb</concertClef>
                   <barlineSpan>1</barlineSpan>
                   <aPitchRange>28-62</aPitchRange>
-                  <pPitchRange>23-67</pPitchRange>
+                  <pPitchRange>28-67</pPitchRange>
+                  <transposeDiatonic>-7</transposeDiatonic>
+                  <transposeChromatic>-12</transposeChromatic>
                   <Channel>
                         <program value="32"/>
                   </Channel>
@@ -9669,10 +9701,13 @@
                   <shortName>Cb.</shortName>
                   <description>Contrabass</description>
                   <musicXMLid>strings.contrabass</musicXMLid>
-                  <clef>F8vb</clef>
+                  <transposingClef>F</transposingClef>
+                  <concertClef>F8vb</concertClef>
                   <barlineSpan>1</barlineSpan>
                   <aPitchRange>28-62</aPitchRange>
                   <pPitchRange>28-67</pPitchRange>
+                  <transposeDiatonic>-7</transposeDiatonic>
+                  <transposeChromatic>-12</transposeChromatic>
                   <Channel>
                         <program value="43"/>
                   </Channel>
@@ -9691,10 +9726,13 @@
                   <shortName>Cbs.</shortName>
                   <description>Contrabasses</description>
                   <musicXMLid>strings.group</musicXMLid>
-                  <clef>F8vb</clef>
+                  <transposingClef>F</transposingClef>
+                  <concertClef>F8vb</concertClef>
                   <barlineSpan>1</barlineSpan>
                   <aPitchRange>28-62</aPitchRange>
                   <pPitchRange>28-67</pPitchRange>
+                  <transposeDiatonic>-7</transposeDiatonic>
+                  <transposeChromatic>-12</transposeChromatic>
                   <Channel>
                         <program value="48"/>
                   </Channel>
@@ -9736,7 +9774,7 @@
             </Instrument>
             <Instrument id="treble-viol">
                   <longName>Treble Viol</longName>
-                  <shortName>Tr. vl.</shortName>
+                  <shortName>Tr. Vl.</shortName>
                   <description>Treble Viol</description>
                   <musicXMLid>strings.viol.treble</musicXMLid>
                   <StringData>

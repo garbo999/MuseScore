@@ -93,6 +93,7 @@ struct TEvent;
 struct LayoutContext;
 
 enum class ClefType : signed char;
+enum class BeatType : char;
 enum class SymId;
 enum class Key;
 
@@ -401,16 +402,17 @@ class Score : public QObject, public ScoreElement {
       QString _importedFilePath;          // file from which the score was imported, or empty
 
 
-      bool _showInvisible       { true  };
-      bool _showUnprintable     { true  };
-      bool _showFrames          { true  };
-      bool _showPageborders     { false };
-      bool _showInstrumentNames { true  };
-      bool _showVBox            { true  };
-      bool _printing            { false };      ///< True if we are drawing to a printer
-      bool _playlistDirty       { true  };
-      bool _autosaveDirty       { true  };
-      bool _saved               { false };      ///< True if project was already saved; only on first
+      bool _showInvisible         { true  };
+      bool _showUnprintable       { true  };
+      bool _showFrames            { true  };
+      bool _showPageborders       { false };
+      bool _markIrregularMeasures { true  };
+      bool _showInstrumentNames   { true  };
+      bool _showVBox              { true  };
+      bool _printing              { false };      ///< True if we are drawing to a printer
+      bool _playlistDirty         { true  };
+      bool _autosaveDirty         { true  };
+      bool _saved                 { false };      ///< True if project was already saved; only on first
                                                 ///< save a backup file will be created, subsequent
                                                 ///< saves will not overwrite the backup file.
       bool _defaultsRead        { false };      ///< defaults were read at MusicXML import, allow export of defaults in convertermode
@@ -511,7 +513,7 @@ class Score : public QObject, public ScoreElement {
       SynthesizerState _synthesizerState;
 
       void createPlayEvents(Chord*);
-      void createGraceNotesPlayEvents(QVector<Chord*> gnb, int tick, Chord* chord, int& ontime);
+      void createGraceNotesPlayEvents(int tick, Chord* chord, int& ontime, int& trailtime);
 
    signals:
       void posChanged(POS, unsigned);
@@ -616,6 +618,8 @@ class Score : public QObject, public ScoreElement {
 
       Segment* setNoteRest(Segment*, int track, NoteVal nval, Fraction, Direction stemDirection = Direction::AUTO);
       void changeCRlen(ChordRest* cr, const TDuration&);
+      void changeCRlen(ChordRest* cr, const Fraction&, bool fillWithRest=true);
+      void createCRSequence(Fraction f, ChordRest* cr, int tick);
 
       Fraction makeGap(Segment*, int track, const Fraction&, Tuplet*, bool keepChord = false);
       bool makeGap1(int baseTick, int staffIdx, Fraction len, int voiceOffset[VOICES]);
@@ -640,7 +644,9 @@ class Score : public QObject, public ScoreElement {
       void removeElement(Element*);
 
       Note* addPitch(NoteVal&, bool addFlag);
-      void addPitch(int pitch, bool addFlag);
+      void addPitch(int pitch, bool addFlag, bool insert);
+      Note* addTiedMidiPitch(int pitch, bool addFlag, Chord* prevChord);
+      Note* addMidiPitch(int pitch, bool addFlag);
       Note* addNote(Chord*, NoteVal& noteVal);
 
       NoteVal noteValForPosition(Position pos, bool &error);
@@ -650,10 +656,13 @@ class Score : public QObject, public ScoreElement {
       void cmdDeleteSelection();
       void cmdFullMeasureRest();
 
-      void putNote(const QPointF& pos, bool replace);
-      void putNote(const Position& pos, bool replace);
+      void putNote(const QPointF&, bool replace, bool insert);
+      void putNote(const Position&, bool replace, bool insert);
+      void putNoteInsert(const Position&);
+
       void repitchNote(const Position& pos, bool replace);
-      void cmdAddPitch(int pitch, bool addFlag);
+      void cmdAddPitch(int pitch, bool addFlag, bool insert);
+      void cmdTimeDelete();
 
       void startCmd();                          // start undoable command
       void endCmd(bool rollback = false);       // end undoable command
@@ -694,12 +703,14 @@ class Score : public QObject, public ScoreElement {
       bool showUnprintable() const     { return _showUnprintable; }
       bool showFrames() const          { return _showFrames; }
       bool showPageborders() const     { return _showPageborders; }
+      bool markIrregularMeasures() const { return _markIrregularMeasures; }
       bool showInstrumentNames() const { return _showInstrumentNames; }
       bool showVBox() const            { return _showVBox; }
       void setShowInvisible(bool v);
       void setShowUnprintable(bool v);
       void setShowFrames(bool v);
       void setShowPageborders(bool v);
+      void setMarkIrregularMeasures(bool v);
       void setShowInstrumentNames(bool v) { _showInstrumentNames = v; }
       void setShowVBox(bool v)            { _showVBox = v;            }
 
@@ -797,6 +808,9 @@ class Score : public QObject, public ScoreElement {
 
       bool noteEntryMode() const               { return inputState().noteEntryMode(); }
       void setNoteEntryMode(bool val)          { inputState().setNoteEntryMode(val); }
+      NoteEntryMethod noteEntryMethod() const         { return inputState().noteEntryMethod();        }
+      void setNoteEntryMethod(NoteEntryMethod m)      { inputState().setNoteEntryMethod(m);           }
+      bool usingNoteEntryMethod(NoteEntryMethod m)    { return inputState().usingNoteEntryMethod(m);  }
       int inputPos() const;
       int inputTrack() const                   { return inputState().track(); }
       const InputState& inputState() const     { return _is;                  }
@@ -812,7 +826,9 @@ class Score : public QObject, public ScoreElement {
       void renderMidi(EventMap* events);
       void renderStaff(EventMap* events, Staff*);
       void renderSpanners(EventMap* events, int staffIdx);
-      int renderMetronome(EventMap* events, Measure* m, int playPos, int tickOffset, bool countIn);
+      void renderMetronome(EventMap* events, Measure* m, int tickOffset);
+
+      BeatType tick2beatType(int tick);
 
       int mscVersion() const    { return _mscVersion; }
       void setMscVersion(int v) { _mscVersion = v; }
@@ -948,6 +964,7 @@ class Score : public QObject, public ScoreElement {
 
       void layoutFingering(Fingering*);
       void cmdSplitMeasure(ChordRest*);
+      void splitMeasure(ChordRest*);
       void cmdJoinMeasure(Measure*, Measure*);
       int pageNumberOffset() const          { return _pageNumberOffset; }
       void setPageNumberOffset(int v)       { _pageNumberOffset = v; }
@@ -1087,6 +1104,7 @@ class Score : public QObject, public ScoreElement {
       virtual QVariant propertyDefault(P_ID) const override;
 
       virtual inline QQueue<MidiInputEvent>* midiInputQueue();
+      virtual inline std::list<MidiInputEvent>* activeMidiPitches();
 
       friend class ChangeSynthesizerState;
       friend class Chord;
@@ -1112,7 +1130,8 @@ class MasterScore : public Score {
 
 //      bool _undoRedo;               ///< true if in processing a undo/redo
       int _midiPortCount { 0 };     // A count of JACK/ALSA midi out ports
-      QQueue<MidiInputEvent> _midiInputQueue;
+      QQueue<MidiInputEvent> _midiInputQueue;         // MIDI events that have yet to be processed
+      std::list<MidiInputEvent> _activeMidiPitches;   // MIDI keys currently being held down
       QList<MidiMapping> _midiMapping;
       bool isSimpleMidiMaping; // midi mapping is simple if all ports and channels
                                // don't decrease and don't have gaps
@@ -1140,7 +1159,8 @@ class MasterScore : public Score {
       virtual RepeatList* repeatList()  const override          { return _repeatList; }
       virtual QList<Excerpt*>& excerpts() override              { return _excerpts;   }
       virtual const QList<Excerpt*>& excerpts() const override  { return _excerpts;   }
-      virtual QQueue<MidiInputEvent>* midiInputQueue() override { return &_midiInputQueue; }
+      virtual QQueue<MidiInputEvent>* midiInputQueue() override         { return &_midiInputQueue;    }
+      virtual std::list<MidiInputEvent>* activeMidiPitches() override   { return &_activeMidiPitches; }
 
       virtual void setUpdateAll() override                  { _cmdState.setUpdateMode(UpdateMode::UpdateAll);  }
       virtual void setLayoutAll() override                  { _cmdState.setUpdateMode(UpdateMode::LayoutAll);  }
@@ -1198,7 +1218,8 @@ inline TempoMap* Score::tempomap() const               { return _masterScore->te
 inline TimeSigMap* Score::sigmap() const               { return _masterScore->sigmap();         }
 inline QList<Excerpt*>& Score::excerpts()              { return _masterScore->excerpts();       }
 inline const QList<Excerpt*>& Score::excerpts() const  { return _masterScore->excerpts();       }
-inline QQueue<MidiInputEvent>* Score::midiInputQueue() { return _masterScore->midiInputQueue(); }
+inline QQueue<MidiInputEvent>* Score::midiInputQueue()          { return _masterScore->midiInputQueue();    }
+inline std::list<MidiInputEvent>* Score::activeMidiPitches()    { return _masterScore->activeMidiPitches(); }
 inline void Score::setUpdateAll()                      { _masterScore->setUpdateAll();          }
 inline void Score::setLayoutAll()                      { _masterScore->setLayoutAll();          }
 inline void Score::setLayout(int tick)                 { _masterScore->setLayout(tick);         }

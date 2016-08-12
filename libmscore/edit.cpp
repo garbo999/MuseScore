@@ -360,8 +360,11 @@ Note* Score::addNote(Chord* chord, NoteVal& noteVal)
       setPlayNote(true);
       setPlayChord(true);
       select(note, SelectType::SINGLE, 0);
-      if (!chord->staff()->isTabStaff())
-            _is.moveToNextInputPos();
+      if (!chord->staff()->isTabStaff()) {
+            NoteEntryMethod entryMethod = _is.noteEntryMethod();
+            if (entryMethod != NoteEntryMethod::REALTIME_AUTO && entryMethod != NoteEntryMethod::REALTIME_MANUAL)
+                  _is.moveToNextInputPos();
+            }
       return note;
       }
 
@@ -903,33 +906,26 @@ void Score::cmdRemoveTimeSig(TimeSig* ts)
 //   cmdAddPitch
 //---------------------------------------------------------
 
-void Score::cmdAddPitch(int step, bool addFlag)
+void Score::cmdAddPitch(int step, bool addFlag, bool insert)
       {
       startCmd();
-      addPitch(step, addFlag);
-      endCmd();
-      }
-
-//---------------------------------------------------------
-//   addPitch
-//---------------------------------------------------------
-
-void Score::addPitch(int step, bool addFlag)
-      {
       Position pos;
       if (addFlag) {
             Element* el = selection().element();
             if (el && el->isNote()) {
                   Note* selectedNote = toNote(el);
-                  pos.segment   = selectedNote->chord()->segment();
+                  Chord* chord  = selectedNote->chord();
+                  Segment* seg  = chord->segment();
+                  pos.segment   = seg;
                   pos.staffIdx  = selectedNote->track() / VOICES;
-                  ClefType clef = staff(pos.staffIdx)->clef(pos.segment->tick());
+                  ClefType clef = staff(pos.staffIdx)->clef(seg->tick());
                   pos.line      = relStep(step, clef);
-                  Chord* chord = toNote(el)->chord();
                   bool error;
                   NoteVal nval = noteValForPosition(pos, error);
-                  if (error)
+                  if (error) {
+                        endCmd();
                         return;
+                        }
                   addNote(chord, nval);
                   endCmd();
                   return;
@@ -941,10 +937,11 @@ void Score::addPitch(int step, bool addFlag)
       ClefType clef = staff(pos.staffIdx)->clef(pos.segment->tick());
       pos.line      = relStep(step, clef);
 
-      if (inputState().repitchMode())
+      if (inputState().usingNoteEntryMethod(NoteEntryMethod::REPITCH))
             repitchNote(pos, !addFlag);
       else
-            putNote(pos, !addFlag);
+            putNote(pos, !addFlag, insert);
+      endCmd();
       }
 
 //---------------------------------------------------------
@@ -1037,6 +1034,47 @@ NoteVal Score::noteValForPosition(Position pos, bool &error)
       }
 
 //---------------------------------------------------------
+//  addTiedMidiPitch
+//---------------------------------------------------------
+
+Note* Score::addTiedMidiPitch(int pitch, bool addFlag, Chord* prevChord)
+      {
+      if (prevChord->isChord()) {
+            Note* n = addMidiPitch(pitch, addFlag);
+            Note* nn = prevChord->findNote(n->pitch());
+            if (nn) {
+                  Tie* tie = new Tie(this);
+                  tie->setStartNote(nn);
+                  tie->setEndNote(n);
+                  tie->setTrack(n->track());
+                  undoAddElement(tie);
+                  return n;
+                  }
+            undoRemoveElement(n);
+            }
+      return 0;
+      }
+
+//---------------------------------------------------------
+//  addMidiPitch
+//---------------------------------------------------------
+
+Note* Score::addMidiPitch(int pitch, bool addFlag)
+      {
+      NoteVal nval(pitch);
+      Staff* st = staff(inputState().track() / VOICES);
+
+      // if transposing, interpret MIDI pitch as representing desired written pitch
+      // set pitch based on corresponding sounding pitch
+      if (!styleB(StyleIdx::concertPitch))
+            nval.pitch += st->part()->instrument(inputState().tick())->transpose().chromatic;
+      // let addPitch calculate tpc values from pitch
+      //Key key   = st->key(inputState().tick());
+      //nval.tpc1 = pitch2tpc(nval.pitch, key, Prefer::NEAREST);
+      return addPitch(nval, addFlag);
+      }
+
+//---------------------------------------------------------
 //   addPitch
 //---------------------------------------------------------
 
@@ -1050,8 +1088,11 @@ Note* Score::addPitch(NoteVal& nval, bool addFlag)
                   return 0;
                   }
             Note* note = addNote(c, nval);
-            if (_is.lastSegment() == _is.segment())
-                  _is.moveToNextInputPos();
+            if (_is.lastSegment() == _is.segment()) {
+                  NoteEntryMethod entryMethod = _is.noteEntryMethod();
+                  if (entryMethod != NoteEntryMethod::REALTIME_AUTO && entryMethod != NoteEntryMethod::REALTIME_MANUAL)
+                        _is.moveToNextInputPos();
+                  }
             return note;
             }
       expandVoice();
@@ -1071,7 +1112,7 @@ Note* Score::addPitch(NoteVal& nval, bool addFlag)
       if (!_is.cr())
             return 0;
       Fraction duration;
-      if (_is.repitchMode()) {
+      if (_is.usingNoteEntryMethod(NoteEntryMethod::REPITCH)) {
             duration = _is.cr()->duration();
             }
       else {
@@ -1080,7 +1121,7 @@ Note* Score::addPitch(NoteVal& nval, bool addFlag)
       Note* note = 0;
       Note* firstTiedNote = 0;
       Note* lastTiedNote = 0;
-      if (_is.repitchMode() && _is.cr()->isChord()) {
+      if (_is.usingNoteEntryMethod(NoteEntryMethod::REPITCH) && _is.cr()->isChord()) {
             // repitch mode for MIDI input (where we are given a pitch) is handled here
             // for keyboard input (where we are given a staff position), there is a separate function Score::repitchNote()
             // the code is similar enough that it could possibly be refactored
@@ -1139,7 +1180,7 @@ Note* Score::addPitch(NoteVal& nval, bool addFlag)
                   }
             select(lastTiedNote);
             }
-      else if (!_is.repitchMode()) {
+      else if (!_is.usingNoteEntryMethod(NoteEntryMethod::REPITCH)) {
             Segment* seg = setNoteRest(_is.segment(), track, nval, duration, stemDirection);
             if (seg) {
                   note = toChord(seg->element(track))->upNote();
@@ -1170,16 +1211,19 @@ Note* Score::addPitch(NoteVal& nval, bool addFlag)
             else
                   qDebug("addPitch: cannot find slur note");
             }
-      if (_is.repitchMode()) {
+      if (_is.usingNoteEntryMethod(NoteEntryMethod::REPITCH)) {
             // move cursor to next note, but skip tied notes (they were already repitched above)
             ChordRest* next = lastTiedNote ? nextChordRest(lastTiedNote->chord()) : nextChordRest(_is.cr());
-            while (next && next->isChord())
+            while (next && !next->isChord())
                   next = nextChordRest(next);
             if (next)
                   _is.moveInputPos(next->segment());
             }
-      else
-            _is.moveToNextInputPos();
+      else {
+            NoteEntryMethod entryMethod = _is.noteEntryMethod();
+            if (entryMethod != NoteEntryMethod::REALTIME_AUTO && entryMethod != NoteEntryMethod::REALTIME_MANUAL)
+                  _is.moveToNextInputPos();
+            }
       return note;
       }
 
@@ -1188,21 +1232,25 @@ Note* Score::addPitch(NoteVal& nval, bool addFlag)
 //    mouse click in state NoteType::ENTRY
 //---------------------------------------------------------
 
-void Score::putNote(const QPointF& pos, bool replace)
+void Score::putNote(const QPointF& pos, bool replace, bool insert)
       {
       Position p;
       if (!getPosition(&p, pos, _is.voice())) {
             qDebug("cannot put note here, get position failed");
             return;
             }
-      if (inputState().repitchMode())
+      if (inputState().usingNoteEntryMethod(NoteEntryMethod::REPITCH))
             repitchNote(p, replace);
       else
-            putNote(p, replace);
+            putNote(p, replace, insert);
       }
 
-void Score::putNote(const Position& p, bool replace)
+void Score::putNote(const Position& p, bool replace, bool insert)
       {
+      if (insert) {
+            putNoteInsert(p);
+            return;
+            }
       int staffIdx    = p.staffIdx;
       Staff* st       = staff(staffIdx);
       Segment* s      = p.segment;
@@ -1217,19 +1265,16 @@ void Score::putNote(const Position& p, bool replace)
             return;
 
       const StringData* stringData = 0;
-      const Instrument* instr = st->part()->instrument(s->tick());
       switch (st->staffType()->group()) {
             case StaffGroup::PERCUSSION: {
-                  const Drumset* ds = instr->drumset();
+                  const Drumset* ds = st->part()->instrument(s->tick())->drumset();
                   stemDirection     = ds->stemDirection(nval.pitch);
                   break;
                   }
-            case StaffGroup::TAB: {
-                  stringData = instr->stringData();
-                  }
+            case StaffGroup::TAB:
+                  stringData = st->part()->instrument(s->tick())->stringData();
                   break;
-            case StaffGroup::STANDARD: {
-                  }
+            case StaffGroup::STANDARD:
                   break;
             }
 
@@ -1337,7 +1382,7 @@ void Score::repitchNote(const Position& p, bool replace)
             }
       if (cr->isRest()) { //skip rests
             ChordRest* next = nextChordRest(cr);
-            while(next && next->isChord())
+            while(next && !next->isChord())
                   next = nextChordRest(next);
             if (next)
                   _is.moveInputPos(next->segment());
@@ -1405,7 +1450,7 @@ void Score::repitchNote(const Position& p, bool replace)
       select(lastTiedNote);
       // move to next Chord
       ChordRest* next = nextChordRest(lastTiedNote->chord());
-      while (next && next->isChord())
+      while (next && !next->isChord())
             next = nextChordRest(next);
       if (next)
             _is.moveInputPos(next->segment());
@@ -1518,7 +1563,7 @@ void Score::cmdAddTie()
                         bool noteFound = false;
                         for (int track = strack; track < etrack; ++track) {
                               ChordRest* cr = toChordRest(seg->element(track));
-                              if (cr == 0 || cr->isChord())
+                              if (cr == 0 || !cr->isChord())
                                     continue;
                               int staffIdx = cr->staffIdx() + cr->staffMove();
                               if (staffIdx != chord->staffIdx() + chord->staffMove())
@@ -1915,14 +1960,13 @@ void Score::deleteItem(Element* el)
                         undoRemoveElement(el);
                   break;
 
-            case Element::Type::BAR_LINE:
-                  {
+            case Element::Type::BAR_LINE: {
                   BarLine* bl           = toBarLine(el);
                   Segment* seg          = bl->segment();
                   Measure* m            = seg->measure();
                   Segment::Type segType = seg->segmentType();
 
-                  if (segType & (Segment::Type::BarLine | Segment::Type::BeginBarLine))
+                  if (segType & (Segment::Type::BeginBarLine | Segment::Type::BarLine))
                         undoRemoveElement(el);
                   else if (segType == Segment::Type::EndBarLine) {
                         m->undoResetProperty(P_ID::REPEAT_END);
@@ -2368,7 +2412,6 @@ void Score::cmdDeleteSelection()
             // so we don't try to delete them twice if they are also in selection
             QList<ScoreElement*> deletedElements;
 
-
             for (Element* e : el) {
                   // these are the linked elements we are about to delete
                   QList<ScoreElement*> links;
@@ -2727,7 +2770,8 @@ void Score::cmdEnterRest(const TDuration& d)
       NoteVal nval;
       setNoteRest(_is.segment(), track, nval, d.fraction(), Direction::AUTO);
       _is.moveToNextInputPos();
-      _is.setRest(false);  // continue with normal note entry
+      if (!noteEntryMode() || usingNoteEntryMethod(NoteEntryMethod::STEPTIME))
+            _is.setRest(false);  // continue with normal note entry
       endCmd();
       }
 
@@ -3083,4 +3127,162 @@ void Score::checkSpanner(int startTick, int endTick)
             }
       }
 
+//---------------------------------------------------------
+//   putNoteInsert
+//---------------------------------------------------------
+
+void Score::putNoteInsert(const Position& pos)
+      {
+      // insert
+      // TODO:
+      //    - check voices
+      //    - split chord/rest
+
+      Element* el = selection().element();
+      if (!el)
+            return;
+      if (!(el->isNote() || el->isRest()))
+            return;
+      TDuration duration = _is.duration();
+      Fraction fraction  = duration.fraction();
+      int len            = fraction.ticks();
+      Segment* seg       = pos.segment;
+      int tick           = seg->tick();
+      Measure* m         = seg->measure();
+
+      for (int track = 0; track < _staves.size() * VOICES; ++track) {
+            Element* e = seg->element(track);
+            if (e && e->isChordRest()) {
+                  ChordRest* cr = toChordRest(e);
+                  if (cr->tuplet() && cr->tuplet()->elements().front() != cr) {
+                        qDebug("cannot insert in tuplet");
+                        return;
+                        }
+                  }
+            }
+
+      undoInsertTime(tick, len);
+      undo(new InsertTime(this, tick, len));
+      for (Segment* s = pos.segment; s; s = s-> next())
+            s->undoChangeProperty(P_ID::TICK, s->rtick() + len);
+      undo(new ChangeMeasureLen(m, m->len() + fraction));
+
+      Segment* s = m->undoGetSegment(Segment::Type::ChordRest, tick);
+      Position p(pos);
+      p.segment = s;
+
+      int trackI = p.staffIdx * VOICES + _is.voice();
+      for (int track = 0; track < _staves.size() * VOICES; ++track) {
+            if (track == trackI)
+                  putNote(p, true, false);
+            else {
+                  Segment* fs = m->first(Segment::Type::ChordRest);
+                  if (fs->tick() == tick && m->hasVoice(track)) {
+                        setRest(fs->tick(),  track, fraction, false, nullptr, false);
+                        continue;
+                        }
+                  Segment* seg1 = 0;
+                  for (Segment* s = fs; s; s = s->next(Segment::Type::ChordRest)) {
+                        if (s->element(track)) {
+                              ChordRest* cr = toChordRest(s->element(track));
+                              if (s->tick() > tick)
+                                    break;
+                              if (s->tick() + cr->duration().ticks() < tick)
+                                    continue;
+                              seg1 = s;
+                              break;
+                              }
+                        }
+                  if (seg1) {
+                        ChordRest* cr = toChordRest(seg1->element(track));
+                        if (seg1->tick() + cr->duration().ticks() == tick) {
+                              addRest(s, track, duration, nullptr);
+                              }
+                        else if (cr->isFullMeasureRest()) {
+                              // do nothing
+                              }
+                        else
+                              changeCRlen(cr, fraction + cr->duration());
+                        }
+                  }
+            }
+      }
+
+//---------------------------------------------------------
+//   cmdTimeDelete
+//---------------------------------------------------------
+
+void Score::cmdTimeDelete()
+      {
+qDebug("time delete");
+      Element* el = selection().element();
+      if (!el)
+            return;
+      ChordRest* cr;
+      if (el->isNote())
+            cr = toNote(el)->chord();
+      else if (el->isChordRest())
+            cr = toChordRest(el);
+      else
+            return;
+      Segment* seg = cr->segment();
+      int tick     = seg->tick();
+      Fraction f   = cr->duration();
+      int len      = f.ticks();
+      int etick    = tick + len;
+      if (seg->measure()->ticks() <= len) {
+            // maybe we should remove the measure
+            qDebug("empty measure not allowed");
+            return;
+            }
+
+      Measure* m  = cr->measure();
+      Segment* fs = m->first(Segment::Type::ChordRest);
+
+      for (int track = 0; track < _staves.size() * VOICES; ++track) {
+            if (m->hasVoice(track)) {
+                  for (Segment* s = fs; s; s = s->next(Segment::Type::ChordRest)) {
+                        if (s->element(track)) {
+                              ChordRest* cr = toChordRest(s->element(track));
+                              int cetick    = s->tick() + cr->duration().ticks();
+
+                              if (cetick <= tick)
+                                    continue;
+                              if (s->tick() >= etick)
+                                    break;
+
+                              if (cr->isFullMeasureRest()) {
+                                    // do nothing
+                                    }
+                              // inside deleted area
+                              else if (s->tick() >= tick && cetick <= etick) {
+                                    // inside
+                                    undoRemoveElement(cr);
+                                    }
+                              else if (s->tick() >= tick) {
+                                    // running out
+                                    Fraction ff = cr->duration() - Fraction::fromTicks(cetick - etick);
+                                    undoRemoveElement(cr);
+                                    createCRSequence(ff, cr, tick + len);
+                                    }
+                              else if (s->tick() < tick && cetick <= etick) {
+                                    // running in
+                                    Fraction f1 = Fraction::fromTicks(tick - s->tick());
+                                    changeCRlen(cr, f1, false);
+                                    }
+                              else {
+                                    // running in/out
+                                    Fraction f1 = cr->duration() - f;
+                                    changeCRlen(cr, f1, false);
+                                    }
+                              }
+                        }
+                  }
+            }
+      undoInsertTime(tick, -len);
+      undo(new InsertTime(this, tick, -len));
+      for (Segment* s = seg->next(); s; s = s->next())
+            s->undoChangeProperty(P_ID::TICK, s->rtick() - len);
+      undo(new ChangeMeasureLen(m, m->len() - f));
+      }
 }

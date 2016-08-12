@@ -742,6 +742,17 @@ void Score::setShowPageborders(bool v)
       }
 
 //---------------------------------------------------------
+//   setMarkIrregularMeasures
+//---------------------------------------------------------
+
+void Score::setMarkIrregularMeasures(bool v)
+      {
+      _markIrregularMeasures = v;
+      setUpdateAll();
+      update();
+      }
+
+//---------------------------------------------------------
 //   dirty
 //---------------------------------------------------------
 
@@ -2471,6 +2482,7 @@ void Score::addAudioTrack()
 
 void Score::padToggle(Pad n)
       {
+      int oldDots = _is.duration().dots();
       switch (n) {
             case Pad::NOTE00:
                   _is.setDuration(TDuration::DurationType::V_LONG);
@@ -2545,8 +2557,35 @@ void Score::padToggle(Pad n)
             // if in "note enter" mode, reset
             // rest flag
             //
-            if (noteEntryMode())
-                  _is.setRest(false);
+            if (noteEntryMode()) {
+                  if (usingNoteEntryMethod(NoteEntryMethod::RHYTHM)) {
+                        switch (oldDots) {
+                              case 1:
+                                    padToggle(Pad::DOT);
+                                    break;
+                              case 2:
+                                    padToggle(Pad::DOTDOT);
+                                    break;
+                              }
+                        NoteVal nval;
+                        if (_is.rest()) {
+                              // Enter a rest
+                              nval = NoteVal();
+                              }
+                        else {
+                              // Enter a note on the middle staff line
+                              Staff* s = staff(_is.track() / VOICES);
+                              int tick = _is.tick();
+                              ClefType clef = s->clef(tick);
+                              Key key = s->key(tick);
+                              nval = NoteVal(line2pitch(4, clef, key));
+                              }
+                        setNoteRest(_is.segment(), _is.track(), nval, _is.duration().fraction());
+                        _is.moveToNextInputPos();
+                        }
+                  else
+                        _is.setRest(false);
+                  }
             }
 
       if (noteEntryMode() || !selection().isSingle())
@@ -2554,20 +2593,24 @@ void Score::padToggle(Pad n)
 
       //do not allow to add a dot on a full measure rest
       Element* e = selection().element();
-      if (e && e->type() == Element::Type::REST) {
+      if (e && e->isRest()) {
             Rest* r = toRest(e);
-            TDuration d = r->durationType();
-            if (d.type() == TDuration::DurationType::V_MEASURE) {
+            if (r->isFullMeasureRest())
                   _is.setDots(0);
-                  // return;
-                  }
             }
 
+      // on measure rest, select the first actual rest
       ChordRest* cr = selection().cr();
+      if (cr && cr->isRest() && cr->measure()->isMMRest()) {
+            Measure* m = cr->measure()->mmRestFirst();
+            if (m)
+                  cr = m->findChordRest(0, 0);
+            }
+
       if (!cr)
             return;
 
-      if (cr->isChord() && (toChord(cr)->noteType() != NoteType::NORMAL)) {
+      if (cr->isChord() && (toChord(cr)->isGrace())) {
             //
             // handle appoggiatura and acciaccatura
             //

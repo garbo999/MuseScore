@@ -5,7 +5,7 @@
     <seq>Ctrl+Shift+P</seq>
     </SC>
   <SC>
-    <key>local-help</key>
+    <key>help</key>
     <seq>F1</seq>
     </SC>
   <SC>
@@ -191,6 +191,10 @@
   <SC>
     <key>rest</key>
     <seq>0</seq>
+    </SC>
+  <SC>
+    <key>realtime-advance</key>
+    <seq>Enter</seq>
     </SC>
   <SC>
     <key>add-staccato</key>
@@ -393,7 +397,7 @@
     <seq>Del</seq>
     </SC>
   <SC>
-    <key>delete-measures</key>
+    <key>time-delete</key>
     <seq>Ctrl+Del</seq>
     <seq>Ctrl+Backspace</seq>
     </SC>
@@ -540,7 +544,7 @@
     </SC>
   <SC>
     <key>tempo</key>
-    <seq>Alt+T</seq>
+    <seq>Alt+Shift+T</seq>
     </SC>
   <SC>
     <key>system-text</key>

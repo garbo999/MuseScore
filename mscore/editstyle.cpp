@@ -37,6 +37,7 @@ namespace Ms {
 EditStyle::EditStyle(Score* s, QWidget* parent)
    : QDialog(parent)
       {
+      setObjectName("EditStyle");
       setupUi(this);
       setWindowFlags(this->windowFlags() & ~Qt::WindowContextHelpButtonHint);
       cs = s;
@@ -65,9 +66,9 @@ EditStyle::EditStyle(Score* s, QWidget* parent)
 
       styleWidgets = {
       //   idx --- showPercent --- widget --- resetButton
-      { StyleIdx::voltaLineStyle,         false, voltaLineStyle,           resetVoltaLineStyle },
-      { StyleIdx::ottavaLineStyle,        false, ottavaLineStyle,          resetOttavaLineStyle },
-      { StyleIdx::pedalLineStyle,         false, pedalLineStyle,           resetPedalLineStyle },
+      { StyleIdx::voltaLineStyle,          false, voltaLineStyle,          resetVoltaLineStyle },
+      { StyleIdx::ottavaLineStyle,         false, ottavaLineStyle,         resetOttavaLineStyle },
+      { StyleIdx::pedalLineStyle,          false, pedalLineStyle,          resetPedalLineStyle },
 
       { StyleIdx::staffUpperBorder,        false, staffUpperBorder,        0 },
       { StyleIdx::staffLowerBorder,        false, staffLowerBorder,        0 },
@@ -167,9 +168,9 @@ EditStyle::EditStyle(Score* s, QWidget* parent)
       { StyleIdx::ottavaY,                 false, ottavaY,                 resetOttavaY },
       { StyleIdx::ottavaHook,              false, ottavaHook,              resetOttavaHook },
       { StyleIdx::ottavaLineWidth,         false, ottavaLineWidth,         resetOttavaLineWidth },
-      { StyleIdx::pedalY,                  false, pedalY,                  0 },
-      { StyleIdx::pedalLineWidth,          false, pedalLineWidth,          0 },
-      { StyleIdx::trillY,                  false, trillY,                  0 },
+      { StyleIdx::pedalY,                  false, pedalY,                  resetPedalY },
+      { StyleIdx::pedalLineWidth,          false, pedalLineWidth,          resetPedalLineWidth },
+      { StyleIdx::trillY,                  false, trillY,                  resetTrillY },
       { StyleIdx::harmonyY,                false, harmonyY,                0 },
       { StyleIdx::harmonyFretDist,         false, harmonyFretDist,         0 },
       { StyleIdx::minHarmonyDistance,      false, minHarmonyDistance,      0 },
@@ -185,6 +186,8 @@ EditStyle::EditStyle(Score* s, QWidget* parent)
       { StyleIdx::tupletDirection,         false, tupletDirection,         resetTupletDirection          },
       { StyleIdx::tupletNumberType,        false, tupletNumberType,        resetTupletNumberType         },
       { StyleIdx::tupletBracketType,       false, tupletBracketType,       resetTupletBracketType        },
+      { StyleIdx::tupletMaxSlope,          false, tupletMaxSlope,          resetTupletMaxSlope           },
+      { StyleIdx::tupletOufOfStaff,        false, tupletOutOfStaff,        0 },
 
       { StyleIdx::lyricsLineHeight,        true,  lyricsLineHeight,             0 },
       { StyleIdx::repeatBarTips,           false, showRepeatBarTips,            0 },
@@ -240,8 +243,6 @@ EditStyle::EditStyle(Score* s, QWidget* parent)
       { StyleIdx::capoPosition,            false, capoPosition,                 0 },
       { StyleIdx::fretNumMag,              true,  fretNumMag,                   0 },
       { StyleIdx::fretY,                   false, fretY,                        0 },
-      { StyleIdx::tupletMaxSlope,          false, tupletMaxSlope,               0 },
-      { StyleIdx::tupletOufOfStaff,        false, tupletOutOfStaff,             0 },
       { StyleIdx::barreLineWidth,          false, barreLineWidth,               0 },
       { StyleIdx::fretMag,                 false, fretMag,                      0 },
       { StyleIdx::scaleBarlines,           false, scaleBarlines,                0 },
@@ -250,6 +251,7 @@ EditStyle::EditStyle(Score* s, QWidget* parent)
       { StyleIdx::MusicalSymbolFont,       false, musicalSymbolFont,            0 },
       { StyleIdx::MusicalTextFont,         false, musicalTextFont,              0 },
       { StyleIdx::autoplaceHairpinDynamicsDistance, false, autoplaceHairpinDynamicsDistance, resetAutoplaceHairpinDynamicsDistance },
+      { StyleIdx::dynamicsMinDistance,      false, dynamicsMinDistance,          resetDynamicsMinDistance },
       };
 
       tupletNumberType->clear();
@@ -434,8 +436,18 @@ EditStyle::EditStyle(Score* s, QWidget* parent)
       connect(mapper,  SIGNAL(mapped(int)), SLOT(resetStyleValue(int)));
       connect(mapper2, SIGNAL(mapped(int)), SLOT(valueChanged(int)));
 
-      resize(904, 577); // override designer values
+      MuseScore::restoreGeometry(this);
       cs->startCmd();
+      }
+
+//---------------------------------------------------------
+//   closeEvent
+//---------------------------------------------------------
+
+void EditStyle::hideEvent(QHideEvent* ev)
+      {
+      MuseScore::saveGeometry(this);
+      QWidget::hideEvent(ev);
       }
 
 //---------------------------------------------------------

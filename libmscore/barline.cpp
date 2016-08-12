@@ -357,7 +357,7 @@ void BarLine::draw(QPainter* painter) const
       QPen pen(curColor(), lw, Qt::SolidLine, Qt::FlatCap);
       painter->setPen(pen);
 
-      switch(barLineType()) {
+      switch (barLineType()) {
             case BarLineType::BROKEN:
                   pen.setStyle(Qt::DashLine);
                   painter->setPen(pen);
@@ -479,6 +479,20 @@ void BarLine::draw(QPainter* painter) const
                         }
                   }
                   break;
+            }
+      Segment* s = segment();
+      if (s) {
+            Measure* m = s->measure();
+            if (s && s->isEndBarLineType() && m->isIrregular() && score()->markIrregularMeasures() && !m->isMMRest()) {
+                  painter->setPen(MScore::layoutBreakColor);
+                  QFont f("FreeSerif");
+                  f.setPointSizeF(12 * spatium() / SPATIUM20);
+                  f.setBold(true);
+                  QString str = m->len() > m->timesig() ? "+" : "-";
+                  QRectF r = QFontMetricsF(f).boundingRect(str);
+                  painter->setFont(f);
+                  painter->drawText(-r.width(), 0.0, str);
+                  }
             }
       }
 
@@ -605,42 +619,12 @@ Element* BarLine::drop(const DropData& data)
 
             if (segment()->isEndBarLineType()) {
                   Measure* m  = segment()->measure();
-                  Measure* nm = m->nextMeasure();
-                  switch (st) {
-                        case BarLineType::END_REPEAT:
-                              m->undoChangeProperty(P_ID::REPEAT_END, true);
-                              if (nm && nm->system() == m->system())
-                                    nm->undoChangeProperty(P_ID::REPEAT_START, false);
-                              break;
-                        case BarLineType::START_REPEAT:
-                              m->undoChangeProperty(P_ID::REPEAT_END, false);
-                              if (nm)
-                                    nm->undoChangeProperty(P_ID::REPEAT_START, true);
-                              break;
-                        case BarLineType::END_START_REPEAT:
-                              m->undoChangeProperty(P_ID::REPEAT_END, true);
-                              if (nm)
-                                    nm->undoChangeProperty(P_ID::REPEAT_START, true);
-                              break;
-                        case BarLineType::DOUBLE:
-                        case BarLineType::BROKEN:
-                        case BarLineType::END:
-                        case BarLineType::DOTTED:
-                              for (Element* e : segment()->elist()) {
-                                    if (e)
-                                          e->undoChangeProperty(P_ID::GENERATED, false);
-                                    }
-
-                        case BarLineType::NORMAL:
-                              if (nm && nm->system() == m->system())
-                                    nm->undoChangeProperty(P_ID::REPEAT_START, false);
-                              m->undoChangeProperty(P_ID::REPEAT_END, false);
-                              for (Element* e : segment()->elist()) {
-                                    if (e)
-                                          e->undoChangeProperty(P_ID::BARLINE_TYPE, QVariant::fromValue(st));
-                                    }
-                              break;
+                  if (st == BarLineType::START_REPEAT) {
+                        if (m->nextMeasureMM())
+                              score()->undoChangeBarLine(m->nextMeasureMM(), st);
                         }
+                  else
+                        score()->undoChangeBarLine(m, st);
                   }
             else if (segment()->isBeginBarLineType()) {
                   undoChangeProperty(P_ID::BARLINE_TYPE, QVariant::fromValue(st));

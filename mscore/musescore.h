@@ -520,6 +520,7 @@ class MuseScore : public QMainWindow, public MuseScoreCore {
       void setCurrentScoreView(int);
       void setNormalState()    { changeState(STATE_NORMAL); }
       void setPlayState()      { changeState(STATE_PLAY); }
+      void setNoteEntryState() { changeState(STATE_NOTE_ENTRY); }
       void checkForUpdate();
       void midiNoteReceived(int channel, int pitch, int velo);
       void midiNoteReceived(int pitch, bool ctrl, int velo);
@@ -607,7 +608,7 @@ class MuseScore : public QMainWindow, public MuseScoreCore {
       void setBasicPalette();
       void excerptsChanged(MasterScore*);
       void scorePageLayoutChanged();
-      bool processMidiRemote(MidiRemoteType type, int data);
+      bool processMidiRemote(MidiRemoteType type, int data, int value);
       ScoreTab* getTab1() const { return tab1; }
       ScoreTab* getTab2() const { return tab2; }
       QList<LanguageItem>& languages() { return _languages; }
@@ -745,8 +746,11 @@ class MuseScore : public QMainWindow, public MuseScoreCore {
       static const std::list<const char*>& advancedNoteInputMenuEntries() { return _advancedNoteInputMenuEntries; }
       std::list<const char*>* noteInputMenuEntries()                 { return &_noteInputMenuEntries; }
 
-      void setNoteInputMenuEntries(std::list<const char*> l)         { _noteInputMenuEntries = l; };
+      void setNoteInputMenuEntries(std::list<const char*> l)         { _noteInputMenuEntries = l; }
       void populateNoteInputMenu();
+
+      static void saveGeometry(QWidget const*const qw);
+      static void restoreGeometry(QWidget*const qw);
       };
 
 extern MuseScore* mscore;
